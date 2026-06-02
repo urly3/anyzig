@@ -33,6 +33,8 @@ pub const std_options: std.Options = .{
 
 pub const exe_str = @tagName(build_options.exe);
 
+const default_version_str: ?[]const u8 = "0.16.0";
+
 const Verbosity = enum {
     debug,
     warn,
@@ -240,8 +242,9 @@ fn isMachVersion(v: SemanticVersion) bool {
     return false;
 }
 
-fn determineSemanticVersion(scratch: Allocator, build_root: BuildRoot) !SemanticVersion {
+fn determineSemanticVersion(scratch: Allocator, build_root: BuildRoot, default_version: ?SemanticVersion) !SemanticVersion {
     const zon = try loadBuildZigZon(scratch, build_root) orelse {
+        if (default_version) |dv| return dv;
         log.err("TODO: no build.zig.zon file, maybe try determining zig version from build.zig?", .{});
         std.process.exit(0xff);
     };
@@ -271,6 +274,8 @@ fn determineSemanticVersion(scratch: Allocator, build_root: BuildRoot) !Semantic
             .{ build_root.directory, key_version, version },
         );
     }
+
+    if (default_version) |dv| return dv;
 
     errExit(
         "build.zig.zon is missing minimum_zig_version, either add it or run '{s} VERSION' to specify a version",
@@ -302,6 +307,8 @@ pub fn main() !void {
 
     const cmdline: Cmdline = try .alloc(arena);
     defer cmdline.free(arena);
+
+    const default_version = VersionSpecifier.parse(default_version_str.?);
 
     const cmdline_offset: usize, const manual_version: ?VersionSpecifier = blk: {
         if (cmdline.len() >= 2) {
@@ -366,6 +373,7 @@ pub fn main() !void {
         }
         if (manual_version) |version| break :blk .{ version, false };
         const build_root = try findBuildRoot(arena, build_root_options) orelse {
+            if (default_version) |dv| break :blk .{ dv, false };
             try std.io.getStdErr().writeAll(
                 "no build.zig to pull a zig version from, you can:\n" ++
                     "  1. run '" ++ exe_str ++ " VERSION' to specify a version\n" ++
@@ -373,7 +381,7 @@ pub fn main() !void {
             );
             std.process.exit(0xff);
         };
-        break :blk .{ .{ .semantic = try determineSemanticVersion(arena, build_root) }, false };
+        break :blk .{ .{ .semantic = try determineSemanticVersion(arena, build_root, SemanticVersion.parse(default_version_str.?)) }, false };
     };
 
     const app_data_path = try std.fs.getAppDataDir(arena, "anyzig");
