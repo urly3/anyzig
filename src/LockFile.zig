@@ -25,6 +25,7 @@ pub fn lock(path: []const u8) !LockFile {
         .windows => std.os.windows.GetCurrentProcessId(),
         .linux => std.os.linux.getpid(),
         .macos => std.c.getpid(),
+        .freebsd => std.c.getpid(),
         else => @compileError("todo"),
     };
     var pid_buffer: [40]u8 = undefined;
